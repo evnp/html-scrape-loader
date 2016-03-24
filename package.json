@@ -1,12 +1,17 @@
 {
-  "name": "sgf-loader",
+  "name": "html-scrape-loader",
   "version": "1.0.0",
-  "description": "A Webpack loader for .sgf files",
+  "description": "A Webpack loader for scraping html",
   "author": "Evan Purcer <evanpurcer@gmail.com> (http://evnp.ca)",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/evnp/sgf-loader.git"
+    "url": "git+https://github.com/evnp/html-scrape-loader.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "http": "0.0.0",
+    "jsdom": "^8.1.0",
+    "loader-utils": "^0.2.12"
+  }
 }

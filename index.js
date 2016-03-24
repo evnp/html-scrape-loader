@@ -2,108 +2,48 @@
     MIT License http://www.opensource.org/licenses/mit-license.php
     Created by: Evan Purcer <evanpurcer@gmail.com> (http://evnp.ca)
 
-    return format:
+    Input format:
     {
-        "info": {
-            "match": "Google DeepMind Challenge Match",
-            "game": "Game 1",
-            "date": "2016-03-09",
-            "location": "Seoul, Korea",
-            "result": "W+Resign",
-            "source": { // the actual SGF keys and values
-                "PW": "Lee Sedol",
-                "PB": "AlphaGo",
-                "EV": "Google DeepMind Challenge Match",
-                ...
-            }
-        },
-        "players": {
-            "black": {
-                "name": "AlphaGo",
-                "team": "Computer",
-                "source": { // the actual SGF keys and values
-                    "PB": "AlphaGo",
-                    "BT": "Computer"
-                }
-            },
-            "white": {
-                "name": "Lee Sedol",
-                "rank": "9d",
-                "team": "Human",
-                "source": { // the actual SGF keys and values
-                    "PW": "Lee Sedol",
-                    "WR": "9d",
-                    "WT": "Human"
-                }
-            }
-        },
-        "moves": [{
-            "player": "black",
-            "x": 16,
-            "y": 3,
-            "source": { // the actual SGF keys and values
-                "B": "pd"
-            }
-        }, {
-            "player": "white",
-            "x": 3,
-            "y": 3,
-            "source": { // the actual SGF keys and values
-                "W": "dd"
-            }
-        }, {
-
-        ...
-
+        paragraphs: '.post p',
+        intro: ['.post, .content', '.intro'],
+        content: ['.content', {
+            heading: 'h1, h2, h3',
+            body: '.body'
         }]
+    }
+
+    Output format:
+    {
+        paragraphs: [
+            '.post p text 1',
+            '.post p text 2',
+            '.post p text 3'
+        ],
+        intro: [
+            '.post .intro text',
+            '.content .intro text'
+        ],
+        content: {
+            heading: [
+                '.content h1 text',
+                '.content h2 text',
+                '.content h3 text'
+            ],
+            body: [
+                '.body text 1',
+                '.body text 2',
+                '.body text 3'
+            ]
+        }
     }
 */
 
-var COLOR_LABELS = {
-    B: 'black',
-    W: 'white'
-};
-
-var PLAYER_LABELS = {
-    PB: 'player',
-    PW: 'player',
-    BT: 'team',
-    WT: 'team',
-    BR: 'rank',
-    WR: 'rank'
-};
-
-var INFO_LABELS = {
-    EV: 'event',
-    RO: 'game',
-    DT: 'date',
-    PC: 'location',
-    SZ: 'board_size',
-    TM: 'time',
-    OT: 'overtime',
-    RE: 'result'
-};
-
-function trim(str) { return str.trim(); }
-function length(str) { return str.length; }
-
-function chunk(array, size) {
-    size = Math.max(parseInt(size, 10), 0);
-    if (!array || !array.length || size < 1) {
-        return [];
-    }
-
-    var index = 0
-      , resIndex = 0
-      , result = Array(Math.ceil(array.length / size))
-      ;
-
-    while (index < array.length) {
-        result[resIndex++] = array.slice(index, (index += size));
-    }
-
-    return result;
-}
+var http = require('http')
+  , https = require('https')
+  , util = require('loader-utils')
+  , jsdom = require('jsdom').jsdom
+  , jQuery = require('jquery')
+  ;
 
 function fromPairs(pairs) {
     var index = -1
@@ -120,47 +60,102 @@ function fromPairs(pairs) {
     return result;
 }
 
+function merge(objects) {
+    var merged = {};
+
+    objects.forEach(function (object) {
+        Object.keys(object).forEach(function (key) {
+            merged[key] = object[key];
+        });
+    });
+
+    return merged;
+}
+
+function scrape(selectors, $context) {
+    return fromPairs(Object.keys(selectors).map(function (key) {
+        var $elements = $context
+          , selArray = selectors[key]
+          ;
+
+        selArray = (
+            typeof selArray === 'string' ? [selArray] : selArray  // ensure array
+        ).filter(function (sel) {  // use string selectors to search down $elements hierarchy
+            $elements = typeof sel === 'string' ? $elements.find(sel) : $elements;
+            return typeof sel === 'object';  // filter down to object selectors only
+        });
+
+        if (selArray.length) {
+            return [key, scrape(merge(selArray), $elements)];
+        } else {
+            return [key, $elements.map(function () {
+                return this.innerHTML.trim().replace(/\s/g, ' ');
+            }).get()];
+        }
+    }));
+}
+
+function prepareExport(loader, html, selectors) {
+    var $, value;
+
+    if (selectors) {
+        $ = jQuery(jsdom(html).defaultView);
+        value = scrape(selectors, $('html'));
+    } else {
+        value = html;
+    }
+
+    loader.value = [value];
+    return "module.exports = " + JSON.stringify(value, undefined, "  ") + ";";
+}
+
 module.exports = function (source) {
     this.cacheable && this.cacheable();
 
-    var value = {info: {source: {}}, players: {}, moves: []}
-      , parts = source.split(';').map(trim).filter(length)
+    var loader    = this
+      , json      = null
+      , selectors = null
+      , html      = null
+      , url       = null
       ;
 
-    parts.forEach(function (part) {
-        var data = fromPairs(chunk(part.match(/[^\[\]]+/g).map(trim).filter(length), 2))
-        for (var key in data) {
-            if (data.hasOwnProperty(key)) {
-                var datum = data[key]
-                  , color_label = COLOR_LABELS[key]
-                  , player_label = PLAYER_LABELS[key]
-                  , info_label = INFO_LABELS[key]
-                  ;
+    try {
+        json = JSON.parse(source);
+    } catch (e) {}
 
-                if (color_label) {
-                    value.moves.push({
-                        player: color_label,
-                        x: datum.charCodeAt(0) - 97,
-                        y: datum.charCodeAt(1) - 97,
-                        source: data
-                    });
-                } else if (player_label) {
-                    var color = COLOR_LABELS[key.replace(/[^WB]/, '')];
-
-                    if (!value.players[color]) {
-                        value.players[color] = {source: {}};
-                    }
-
-                    value.players[color][player_label] = datum;
-                    value.players[color].source[key] = datum;
-                } else if (info_label) {
-                    value.info[info_label] = datum;
-                    value.info.source[key] = datum;
-                }
-            }
+    if (json) {
+        selectors = json.selectors;
+        html = json.html;
+        url = json.url;
+    } else {
+        if (source.indexOf('<') !== -1 && source.indexOf('>') !== -1) {
+            html = source;
+        } else {
+            url = source;
         }
-    });
+    }
 
-    this.value = [value];
-    return "module.exports = " + JSON.stringify(value, undefined, "  ") + ";";
+    if (!selectors && loader.query) {
+        selectors = util.parseQuery(loader.query);
+    }
+
+    if (html) {
+        return prepareExport(loader, html, selectors);
+    } else if (url) {
+        var callback = this.async();
+
+        (url.startsWith('https') ? https : http).get(url, function (response) {
+            html = '';
+            response.on('data', function (chunk) { html += chunk; });
+            response.on('end', function () {
+                callback(null, prepareExport(loader, html, selectors))
+            });
+        });
+    } else {
+        throw new Error(
+            "You must provide an html or url string defining the html to be scraped:\r\n" +
+            "  - if the source file is .html, as its contents\r\n" +
+            "  - if the source file is .json, under 'html' or 'url' top-level keys"
+        );
+    }
 };
