@@ -109,7 +109,7 @@ function prepareExport(loader, html, selectors) {
     return "module.exports = " + JSON.stringify(value, undefined, "  ") + ";";
 }
 
-module.exports = function (source) {
+module.exports = function (source, callback) {
     this.cacheable && this.cacheable();
 
     var loader    = this
@@ -119,15 +119,19 @@ module.exports = function (source) {
       , url       = null
       ;
 
-    try {
-        json = JSON.parse(source);
-    } catch (e) {}
+    if (typeof source === 'object') {
+        json = source;
+    } else if (typeof source === 'string') {
+        try {
+            json = JSON.parse(source);
+        } catch (e) {}
+    }
 
     if (json) {
         selectors = json.selectors;
         html = json.html;
         url = json.url;
-    } else {
+    } else if (typeof source === 'string') {
         if (source.indexOf('<') !== -1 && source.indexOf('>') !== -1) {
             html = source;
         } else {
@@ -142,7 +146,7 @@ module.exports = function (source) {
     if (html) {
         return prepareExport(loader, html, selectors);
     } else if (url) {
-        var callback = this.async();
+        callback = callback || this.async && this.async();
 
         (url.startsWith('https') ? https : http).get(url, function (response) {
             html = '';
