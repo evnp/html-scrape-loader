@@ -1,5 +1,7 @@
-# html-scrape-loader
-A Webpack loader for scraping HTML
+# html-scrape-loader 
+
+A Webpack loader for scraping HTML - https://www.npmjs.com/package/html-scrape-loader
+
 ```
 npm install html-scrape-loader
 ```
